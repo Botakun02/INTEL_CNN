@@ -1,76 +1,183 @@
-# Intel Customised AI Kitchen for India
+# Intel Customised AI Kitchen
 
-This repository contains a Convolutional Neural Network (CNN) model built using TensorFlow and Keras, designed to recognize various vegetables and suggest recipes based on the identified items. The model is trained on the Fruits 360 dataset, which has been augmented for better performance.
+This project classifies fruit or vegetable images with a trained TensorFlow/Keras CNN
+model and can suggest recipes for the detected ingredients through the Spoonacular API.
 
-## Table of Contents
+The original Colab exports are still in `Code Base/` and `Final Model/INTEL.ipynb`.
+For local use, start with the Streamlit app and reusable Python modules added in this
+version.
 
-- [Introduction](#introduction)
-- [Dataset](#dataset)
-- [Model Architecture](#model-architecture)
-- [Data Augmentation](#data-augmentation)
-- [Training the Model](#training-the-model)
-- [Evaluation](#evaluation)
-- [Usage](#usage)
-- [Dependencies](#dependencies)
-- [Results](#results)
-- [Contributing](#contributing)
+## What It Does
 
-## Introduction
+1. Upload one or more ingredient images (or pick from the example gallery).
+2. Load a saved Keras classifier.
+3. Preprocess each image to `224x224` RGB and classify it, with a dropdown to correct
+   any misclassification.
+4. Combine every confirmed ingredient into one search.
+5. Optionally search Spoonacular for recipes using all detected ingredients together.
 
-This project aims to build a robust vegetable recognition system using a pre-trained MobileNetV2 model. The recognized vegetables can then be used to suggest recipes, providing a practical application for meal planning and dietary management.
+## Project Layout
 
-## Dataset
+```text
+.
++-- streamlit_app.py          # Local web app
++-- train.py                  # Local training script
++-- evaluate.py               # Held-out split evaluation script
++-- scripts/
+|   +-- prepare_dataset.py    # Converts downloaded datasets into trainer format
++-- datasets/
+|   +-- ingredients/          # Prepared local copy of the supplied dataset
++-- requirements.txt          # Python dependencies
++-- .env.example              # Recipe API environment variable template
++-- src/
+|   +-- labels.py             # Recipe label aliases
+|   +-- model_registry.py     # Auto-discovers trained models in artifacts/
+|   +-- predict.py            # Model loading and prediction helpers
+|   +-- recipes.py            # Spoonacular recipe lookup
++-- Final Model/
+|   +-- INTEL.ipynb           # Original Colab-style notebook
+|   +-- intel.py              # Original Colab-style inference export
++-- Code Base/                # Original Colab-style training exports
+```
 
-The dataset used for training and testing the model is the Fruits 360 dataset, which includes a wide variety of fruits and vegetables. The dataset is split into training and testing sets, with further splitting of the training set for validation.
+## Setup
 
-- Training Directory: /content/fruits/fruits-360_dataset/fruits-360/Training
-- Testing Directory: /content/fruits/fruits-360_dataset/fruits-360/Test
+Create and activate a virtual environment, then install dependencies:
 
-## Model Architecture
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-The model is based on MobileNetV2, a lightweight deep learning model optimized for mobile and embedded vision applications. The architecture includes:
+Recipe lookup is optional. Sign up for a free API key at
+[spoonacular.com/food-api](https://spoonacular.com/food-api) (no credit card required
+for the free plan, 50 points/day) and set it as an environment variable:
 
-- Base Model: MobileNetV2 (pre-trained on ImageNet)
-- GlobalAveragePooling2D Layer
-- Dense Layer: 512 units, ReLU activation
-- Dropout Layer: 50% dropout rate
-- Output Layer: Softmax activation, number of classes based on the dataset
+```powershell
+$env:SPOONACULAR_API_KEY="your_spoonacular_api_key"
+```
 
-## Data Augmentation
+Or create a local `.env` file:
 
-Data augmentation is applied to the training data to enhance the model's generalization ability. The augmentation techniques include:
+```text
+SPOONACULAR_API_KEY=your_spoonacular_api_key
+```
 
-- Rescaling
-- Shear Transformation
-- Zoom Transformation
-- Horizontal Flip
-- Rotation
-- Width and Height Shift
-- Fill Mode: Nearest
+Do not commit real API keys. `.env.example` shows the required variable name. If the
+key is missing or Spoonacular returns no results, the app shows recipe search links
+instead.
 
-## Training the Model
+## Run The App
 
-The model is trained using the augmented dataset with the following configurations:
+```powershell
+streamlit run streamlit_app.py
+```
 
-- Optimizer: Adam
-- Loss Function: Categorical Crossentropy
-- Metrics: Accuracy
-- Callbacks: EarlyStopping, ReduceLROnPlateau
+Then open the local URL printed by Streamlit.
 
-### Training Script
+## Train A Better Model
 
-python
-# Training the model
-history = model.fit(
-    train_generator,
-    epochs=5,
-    validation_data=validation_generator,
-    callbacks=[early_stopping, reduce_lr]
-)
+Recommended starter dataset: Kaggle's **Fruits and Vegetables Image Recognition
+Dataset** by Kritik Seth. It is small enough for local training and closely matches
+the app's current ingredient labels:
 
+```text
+https://www.kaggle.com/datasets/kritikseth/fruit-and-vegetable-image-recognition
+```
 
-## Evaluation
+For a larger, more real-world dataset, use **Packed Fruits and Vegetables Recognition
+Benchmark / PackEat**:
 
-The model is evaluated on the test dataset to determine its accuracy and performance.
+```text
+https://www.kaggle.com/datasets/sergeynesteruk/packed-fruits-and-vegetables-recognition-benchmark
+https://zenodo.org/records/16901177
+```
 
+The supplied dataset from `C:\Users\bryan\Downloads\archive (1)` has already been
+prepared into this workspace:
 
+```text
+datasets/ingredients/
++-- train/        # 3,115 images, 33 classes
++-- validation/   # 351 images, 33 classes
++-- test/         # 359 images, 33 classes
+```
+
+The dataset originally shipped with 36 class folders, but `bell pepper`/`capsicum`/`paprika`
+were the same vegetable under three names, and `corn`/`sweetcorn` were the same crop under
+two. Those folders were merged into `bell pepper` and `corn` respectively, which removed
+label noise the model was otherwise being penalized for.
+
+If you need to rebuild that prepared copy, run:
+
+```powershell
+python scripts/prepare_dataset.py --source "C:\Users\bryan\Downloads\archive (1)" --output-dir datasets/ingredients --all-splits
+```
+
+For any future dataset, use a directory where each class has its own subfolder:
+
+```text
+dataset/
++-- apple/
++-- banana/
++-- tomato/
+```
+
+If you downloaded a zip from Kaggle, convert one split into the trainer format:
+
+```powershell
+python scripts/prepare_dataset.py --source "C:\path\to\archive.zip" --output-dir datasets/kaggle_fruitveg --split train
+```
+
+If the extracted dataset already has `train`, `validation`, and `test` folders,
+prepare all splits at once:
+
+```powershell
+python scripts/prepare_dataset.py --source "C:\path\to\extracted_dataset" --output-dir datasets/kaggle_fruitveg --all-splits
+```
+
+Run:
+
+```powershell
+python train.py --train-dir datasets/ingredients/train --validation-dir datasets/ingredients/validation --test-dir datasets/ingredients/test --output-dir artifacts/ingredients_model
+```
+
+The script saves:
+
+- `artifacts/ingredients_model/best_model.keras`
+- `artifacts/ingredients_model/final_model.keras`
+- `artifacts/ingredients_model/class_indices.json`
+- `artifacts/ingredients_model/metadata.json`
+- validation and test metrics/reports as JSON and CSV files
+
+The currently trained model scores 96.7% accuracy on the held-out test split
+(`artifacts/ingredients_model/test_metrics.json`).
+
+The default trainer uses EfficientNetV2B0, class balancing, stronger augmentation,
+and a short fine-tuning stage. After training, restart the Streamlit app. Any model
+inside `artifacts/` with a matching `class_indices.json` is discovered automatically
+and listed in the sidebar; the app has no bundled fallback model, so at least one
+trained model must exist under `artifacts/` before it will run.
+
+Useful options:
+
+```powershell
+python train.py --train-dir datasets/ingredients/train --validation-dir datasets/ingredients/validation --epochs 25 --fine-tune-epochs 10
+python train.py --train-dir datasets/ingredients/train --validation-dir datasets/ingredients/validation --architecture mobilenet_v2
+python train.py --train-dir datasets/ingredients/train --validation-dir datasets/ingredients/validation --batch-size 16
+```
+
+To evaluate an already trained model on the held-out test split:
+
+```powershell
+python evaluate.py --model artifacts/ingredients_model/best_model.keras --data-dir datasets/ingredients/test --class-indices artifacts/ingredients_model/class_indices.json --output-dir artifacts/ingredients_model/test_eval
+```
+
+## Notes
+
+- `Code Base/intell.py` and `Code Base/intel (1).py` are Colab exports. They include
+  notebook shell commands such as `!kaggle`, so they are kept as references rather
+  than local Python entry points.
+- The app no longer hardcodes recipe API credentials.
+- The local app reports top-k confidence values instead of only a single class.
