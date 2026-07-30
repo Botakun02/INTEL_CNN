@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 
 import streamlit as st
@@ -75,15 +76,40 @@ def chunked(items: list, size: int) -> list[list]:
     return [items[start : start + size] for start in range(0, len(items), size)]
 
 
+if "camera_shot_count" not in st.session_state:
+    st.session_state.camera_shot_count = 0
+if "camera_captures" not in st.session_state:
+    st.session_state.camera_captures = []
+
 uploaded_files = st.file_uploader(
     "Upload one or more ingredient images",
     type=["jpg", "jpeg", "png", "webp"],
     accept_multiple_files=True,
 )
 
+with st.expander("📷 Use your camera"):
+    camera_photo = st.camera_input(
+        "Take a photo", key=f"camera_input_{st.session_state.camera_shot_count}"
+    )
+    if camera_photo is not None and st.button("Add this photo"):
+        st.session_state.camera_captures.append(
+            (f"camera_{st.session_state.camera_shot_count}", camera_photo.getvalue())
+        )
+        st.session_state.camera_shot_count += 1
+        st.rerun()
+
+    if st.session_state.camera_captures:
+        st.caption(f"{len(st.session_state.camera_captures)} photo(s) added from camera.")
+        if st.button("Clear camera photos"):
+            st.session_state.camera_captures = []
+            st.rerun()
+
 image_sources: list[tuple[str, str, Image.Image]] = []
 for index, uploaded_file in enumerate(uploaded_files):
     image_sources.append((f"upload_{index}_{uploaded_file.name}", uploaded_file.name, Image.open(uploaded_file)))
+
+for photo_key, photo_bytes in st.session_state.camera_captures:
+    image_sources.append((photo_key, "Camera photo", Image.open(io.BytesIO(photo_bytes))))
 
 sample_paths = sorted(SAMPLES_DIR.glob("*.jpg")) if SAMPLES_DIR.exists() else []
 if sample_paths:
